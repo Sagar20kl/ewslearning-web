@@ -1,0 +1,33 @@
+{
+  "workbench.colorTheme": "Dark Knight Theme",
+  "workbench.colorCustomizations": {
+    "activityBar.background": "#0b0e14",
+    "activityBar.foreground": "#f5c518",
+    "activityBarBadge.background": "#f5c518",
+    "activityBarBadge.foreground": "#000000",
+    "sideBar.background": "#0d1117",
+    "sideBarTitle.foreground": "#f5c518",
+    "sideBarSectionHeader.background": "#161b22",
+    "sideBarSectionHeader.foreground": "#f5c518",
+    "editor.background": "#090c10",
+    "editor.foreground": "#e6edf3",
+    "editor.lineHighlightBackground": "#161b2280",
+    "editorCursor.foreground": "#f5c518",
+    "editorLineNumber.foreground": "#484f58",
+    "editorLineNumber.activeForeground": "#f5c518",
+    "editorGroupHeader.tabsBackground": "#0d1117",
+    "tab.activeBackground": "#090c10",
+    "tab.activeForeground": "#f5c518",
+    "tab.activeBorderTop": "#f5c518",
+    "tab.inactiveBackground": "#0d1117",
+    "tab.inactiveForeground": "#8b949e",
+    "statusBar.background": "#0b0e14",
+    "statusBar.foreground": "#f5c518",
+    "statusBar.noFolderBackground": "#0b0e14",
+    "statusBar.debuggingBackground": "#f5c518",
+    "statusBar.debuggingForeground": "#000000",
+    "titleBar.activeBackground": "#0b0e14",
+    "titleBar.activeForeground": "#e6edf3",
+    "terminal.background": "#090c10"
+  }
+}

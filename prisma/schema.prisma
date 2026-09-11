@@ -1,0 +1,149 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  SUPER_ADMIN
+  INSTRUCTOR
+  CORPORATE_CLIENT
+  STUDENT
+}
+
+enum ProgramSector {
+  Corporate
+  Industrial
+  Municipal
+  Universal
+}
+
+enum DeliveryMode {
+  Online
+  Offline
+  Hybrid
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  PROPOSAL_SENT
+  ENROLLED
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model User {
+  id           String       @id @default(uuid())
+  name         String
+  email        String       @unique
+  passwordHash String?
+  role         Role         @default(STUDENT)
+  organization String?
+  avatar       String?
+  enrollments  Enrollment[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Program {
+  id               String        @id @default(uuid())
+  slug             String        @unique
+  title            String
+  tagline          String
+  description      String
+  sector           ProgramSector @default(Corporate)
+  mode             DeliveryMode  @default(Hybrid)
+  duration         String
+  level            String        @default("Intermediate")
+  rating           Float         @default(4.9)
+  reviewCount      Int           @default(0)
+  enrolledCount    Int           @default(0)
+  priceINR         Int           @default(4999)
+  priceUSD         Int           @default(69)
+  coverImage       String
+  instructorName   String
+  instructorRole   String
+  highlights       String[]
+  learningOutcomes String[]
+  targetAudience   String[]
+  prerequisites    String[]
+  curriculum       Module[]
+  enrollments      Enrollment[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model Module {
+  id        String   @id @default(uuid())
+  title     String
+  duration  String
+  programId String
+  program   Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  lessons   Lesson[]
+  order     Int      @default(0)
+}
+
+model Lesson {
+  id            String   @id @default(uuid())
+  title         String
+  duration      String
+  videoUrl      String
+  isFreePreview Boolean  @default(false)
+  summary       String
+  moduleId      String
+  module        Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  order         Int      @default(0)
+}
+
+model Inquiry {
+  id              String        @id @default(uuid())
+  name            String
+  email           String
+  phone           String?
+  organization    String
+  programInterest String
+  teamSize        String
+  mode            String
+  message         String?
+  status          InquiryStatus @default(NEW)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Enrollment {
+  id          String           @id @default(uuid())
+  userId      String
+  programId   String
+  user        User             @relation(fields: [userId], references: [id])
+  program     Program          @relation(fields: [programId], references: [id])
+  progress    Float            @default(0)
+  status      EnrollmentStatus @default(ENROLLED)
+  certificate Certificate?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Certificate {
+  id            String     @id @default(uuid())
+  certificateId String     @unique
+  studentName   String
+  courseTitle   String
+  enrollmentId  String     @unique
+  enrollment    Enrollment @relation(fields: [enrollmentId], references: [id])
+  issuedAt      DateTime   @default(now())
+  verifyUrl     String
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
