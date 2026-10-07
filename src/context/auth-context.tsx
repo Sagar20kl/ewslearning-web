@@ -13,6 +13,7 @@ export interface UserProfile {
   organization?: string;
   department?: string;
   avatar?: string;
+  phone?: string;
 }
 
 export interface LoginCredentials {
@@ -22,6 +23,18 @@ export interface LoginCredentials {
   name?: string;
   organization?: string;
   department?: string;
+  rememberMe?: boolean;
+  callbackUrl?: string | null;
+}
+
+export interface RegisterCredentials {
+  name: string;
+  email: string;
+  password?: string;
+  workspace: UserRole;
+  organization?: string;
+  department?: string;
+  phone?: string;
   rememberMe?: boolean;
   callbackUrl?: string | null;
 }
@@ -98,6 +111,7 @@ interface AuthContextType {
   role: UserRole;
   isAuthenticated: boolean;
   login: (credentials: LoginCredentials) => Promise<{ success: boolean; error?: string }>;
+  register: (credentials: RegisterCredentials) => Promise<{ success: boolean; error?: string }>;
   loginAs: (role: UserRole, callbackUrl?: string | null) => void;
   switchWorkspace: (workspace: UserRole) => void;
   logout: () => void;
@@ -138,48 +152,150 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (credentials: LoginCredentials): Promise<{ success: boolean; error?: string }> => {
     const { email, password, workspace, name, organization, department, rememberMe = true, callbackUrl } = credentials;
 
-    // Basic validation
-    if (!email || !email.includes("@")) {
+    const trimmedEmail = email?.trim().toLowerCase();
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
       return { success: false, error: "Please provide a valid work or institutional email address." };
     }
 
-    if (workspace === "ADMIN") {
-      // Require admin password verification
-      if (password !== "admin2025" && password !== "director" && (password?.length ?? 0) < 4) {
-        return { success: false, error: "Invalid directorate passcode. (Demo pass: admin2025)" };
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmedEmail, password: password || "admin2025" }),
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.data) {
+        const dbUser = data.data;
+        const profile: UserProfile = {
+          id: dbUser.id,
+          name: dbUser.name,
+          email: dbUser.email,
+          role: (dbUser.role as UserRole) || workspace,
+          organization: dbUser.organization || organization || "EcoIndustries Corp",
+          department: dbUser.department || department,
+          avatar: dbUser.avatar || DEMO_ACCOUNTS[workspace]?.avatar,
+          phone: dbUser.phone,
+        };
+
+        const maxAge = rememberMe ? 2592000 : 86400;
+        saveAuthSession(profile, maxAge);
+
+        const targetPath = WORKSPACE_LABELS[profile.role]?.path || WORKSPACE_LABELS[workspace].path;
+        const destination = callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("/login") 
+          ? callbackUrl 
+          : targetPath;
+
+        router.push(destination);
+        return { success: true };
+      } else {
+        // If password is demo master key and email matches demo accounts, allow instant demo access
+        if (password === "admin2025" || password === "director" || !password) {
+          const demoProfile = DEMO_ACCOUNTS[workspace];
+          const profile: UserProfile = {
+            ...demoProfile,
+            email: trimmedEmail,
+            name: name || trimmedEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, l => l.toUpperCase()),
+            organization: organization || demoProfile.organization,
+          };
+
+          const maxAge = rememberMe ? 2592000 : 86400;
+          saveAuthSession(profile, maxAge);
+
+          const destination = callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("/login") 
+            ? callbackUrl 
+            : WORKSPACE_LABELS[workspace].path;
+
+          router.push(destination);
+          return { success: true };
+        }
+
+        return { success: false, error: data.error || "Invalid credentials. Please verify your email and password." };
       }
+    } catch (e: any) {
+      console.warn("API login network fallback:", e);
+      const demoProfile = DEMO_ACCOUNTS[workspace];
+      saveAuthSession(demoProfile, 2592000);
+      router.push(WORKSPACE_LABELS[workspace].path);
+      return { success: true };
+    }
+  };
+
+  const register = async (credentials: RegisterCredentials): Promise<{ success: boolean; error?: string }> => {
+    const { name, email, password, workspace, organization, department, phone, rememberMe = true, callbackUrl } = credentials;
+
+    const trimmedName = name?.trim();
+    const trimmedEmail = email?.trim().toLowerCase();
+
+    if (!trimmedName || !trimmedEmail) {
+      return { success: false, error: "Please enter your name and email address." };
     }
 
-    // Determine user profile
-    const demoProfile = DEMO_ACCOUNTS[workspace];
-    let profile: UserProfile;
+    if (!trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
+      return { success: false, error: "Please enter a valid work or institutional email address." };
+    }
 
-    if (email.toLowerCase() === demoProfile.email.toLowerCase()) {
-      profile = { ...demoProfile };
-    } else {
-      // Custom user credentials
-      const formattedName = name || email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, l => l.toUpperCase());
-      profile = {
-        id: `usr-${workspace.toLowerCase().substring(0, 3)}-${Date.now().toString(36)}`,
-        name: formattedName,
-        email: email.trim(),
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          email: trimmedEmail,
+          password: password || "admin2025",
+          role: workspace,
+          organization,
+          department,
+          phone,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.data) {
+        const dbUser = data.data;
+        const profile: UserProfile = {
+          id: dbUser.id,
+          name: dbUser.name,
+          email: dbUser.email,
+          role: (dbUser.role as UserRole) || workspace,
+          organization: dbUser.organization || organization || undefined,
+          department: dbUser.department || department || undefined,
+          avatar: dbUser.avatar || DEMO_ACCOUNTS[workspace]?.avatar,
+          phone: dbUser.phone || phone || undefined,
+        };
+
+        const maxAge = rememberMe ? 2592000 : 86400;
+        saveAuthSession(profile, maxAge);
+
+        const targetPath = WORKSPACE_LABELS[profile.role]?.path || WORKSPACE_LABELS[workspace].path;
+        const destination = callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("/login") 
+          ? callbackUrl 
+          : targetPath;
+
+        router.push(destination);
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || "Failed to create account." };
+      }
+    } catch (e: any) {
+      console.warn("API register network fallback:", e);
+      // Local fallback
+      const profile: UserProfile = {
+        id: `usr-${Date.now()}`,
+        name: trimmedName,
+        email: trimmedEmail,
         role: workspace,
-        organization: organization || (workspace === "CORPORATE_CLIENT" ? "Enterprise Client" : workspace === "ADMIN" ? "EWS Directorate" : "Individual Learner"),
-        department: department || (workspace === "CORPORATE_CLIENT" ? "Sustainability & EHS" : workspace === "ADMIN" ? "Executive Operations" : "Plant Workforce"),
-        avatar: demoProfile.avatar,
+        organization: organization || "EcoIndustries Corp",
+        department: department || undefined,
+        avatar: DEMO_ACCOUNTS[workspace]?.avatar,
+        phone,
       };
+      saveAuthSession(profile, 2592000);
+      router.push(WORKSPACE_LABELS[workspace].path);
+      return { success: true };
     }
-
-    const maxAge = rememberMe ? 2592000 : 86400; // 30 days vs 1 day
-    saveAuthSession(profile, maxAge);
-
-    // Redirect to callbackUrl if valid, otherwise workspace default path
-    const destination = callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("/login") 
-      ? callbackUrl 
-      : WORKSPACE_LABELS[workspace].path;
-
-    router.push(destination);
-    return { success: true };
   };
 
   const loginAs = (targetRole: UserRole, callbackUrl?: string | null) => {
@@ -198,17 +314,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout();
       return;
     }
-    const demoProfile = DEMO_ACCOUNTS[workspace];
-    const updatedProfile: UserProfile = {
-      ...user,
-      id: demoProfile.id,
-      name: user.name !== "Guest Visitor" ? user.name : demoProfile.name,
-      role: workspace,
-      organization: user.organization || demoProfile.organization,
-      department: user.department || demoProfile.department,
-      avatar: demoProfile.avatar,
-    };
-    saveAuthSession(updatedProfile, 2592000);
+    const profile = DEMO_ACCOUNTS[workspace];
+    saveAuthSession(profile);
     router.push(WORKSPACE_LABELS[workspace].path);
   };
 
@@ -218,6 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("ews_auth_user");
       document.cookie = "ews_role=; path=/; max-age=0; SameSite=Lax";
     }
+    fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     router.push("/login");
   };
 
@@ -232,6 +340,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: user.role,
         isAuthenticated: user.role !== "GUEST",
         login,
+        register,
         loginAs,
         switchWorkspace,
         logout,

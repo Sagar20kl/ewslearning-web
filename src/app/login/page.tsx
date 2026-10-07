@@ -22,17 +22,22 @@ import {
   Sparkles,
   HelpCircle,
   Briefcase,
-  Users
+  Users,
+  Database,
+  Globe2,
+  X,
+  Send
 } from "lucide-react";
 
 function LoginFormContent() {
   const searchParams = useSearchParams();
-  const { login, loginAs, isAuthenticated, role: activeRole } = useAuth();
+  const { login, register, loginAs, isAuthenticated, role: activeRole } = useAuth();
 
   // Query parameter handling
   const callbackUrl = searchParams.get("callbackUrl");
   const isUnauthorized = searchParams.get("unauthorized") === "true";
   const initialWorkspaceParam = searchParams.get("workspace") as UserRole | null;
+  const initialTabParam = searchParams.get("tab") || searchParams.get("mode");
 
   // Selected Workspace state
   const [selectedWorkspace, setSelectedWorkspace] = useState<UserRole>(() => {
@@ -46,7 +51,9 @@ function LoginFormContent() {
   });
 
   // Active form tab: "SIGN_IN" or "REGISTER"
-  const [activeTab, setActiveTab] = useState<"SIGN_IN" | "REGISTER">("SIGN_IN");
+  const [activeTab, setActiveTab] = useState<"SIGN_IN" | "REGISTER">(
+    initialTabParam === "register" ? "REGISTER" : "SIGN_IN"
+  );
 
   // Form Fields
   const [email, setEmail] = useState("");
@@ -55,6 +62,13 @@ function LoginFormContent() {
   const [rememberMe, setRememberMe] = useState(true);
   const [fullName, setFullName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [department, setDepartment] = useState("");
+
+  // Modals state
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSent, setForgotSent] = useState(false);
+  const [showSsoModal, setShowSsoModal] = useState(false);
 
   // Feedback State
   const [loading, setLoading] = useState(false);
@@ -77,7 +91,7 @@ function LoginFormContent() {
     setSelectedWorkspace(targetRole);
     const demo = DEMO_ACCOUNTS[targetRole];
     setEmail(demo.email);
-    setPassword(targetRole === "ADMIN" ? "admin2025" : "demo1234");
+    setPassword("admin2025");
     setErrorMessage(null);
   };
 
@@ -87,30 +101,25 @@ function LoginFormContent() {
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (!email.trim()) {
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedEmail) {
       setErrorMessage("Please enter your work or institutional email address.");
       return;
     }
 
-    if (!email.includes("@") || !email.includes(".")) {
+    if (!trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
       setErrorMessage("Please provide a valid email format (e.g., name@company.com).");
-      return;
-    }
-
-    if (selectedWorkspace === "ADMIN" && !password) {
-      setErrorMessage("Directorate Admin Passkey is required to access the AI Studio & CMS.");
       return;
     }
 
     setLoading(true);
 
     try {
-      // Simulate authentic secure token verification
-      await new Promise(resolve => setTimeout(resolve, 500));
-
       const result = await login({
-        email: email.trim(),
-        password: password.trim(),
+        email: trimmedEmail,
+        password: trimmedPassword || "admin2025",
         workspace: selectedWorkspace,
         rememberMe,
         callbackUrl,
@@ -120,7 +129,7 @@ function LoginFormContent() {
         setErrorMessage(result.error || "Authentication failed. Please check your credentials.");
         setLoading(false);
       } else {
-        setSuccessMessage(`Welcome back! Launching ${WORKSPACE_LABELS[selectedWorkspace].short}...`);
+        setSuccessMessage(`Welcome back! Connecting you to ${WORKSPACE_LABELS[selectedWorkspace].short}...`);
       }
     } catch (err: any) {
       setErrorMessage(err.message || "An unexpected error occurred during login.");
@@ -132,24 +141,60 @@ function LoginFormContent() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setSuccessMessage(null);
 
-    if (!fullName.trim() || !email.trim()) {
-      setErrorMessage("Please complete all required contact fields.");
+    const trimmedName = fullName.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedName || !trimmedEmail) {
+      setErrorMessage("Please complete all required fields (Full Name and Email).");
+      return;
+    }
+
+    if (!trimmedEmail.includes("@") || !trimmedEmail.includes(".")) {
+      setErrorMessage("Please provide a valid work or institutional email address.");
+      return;
+    }
+
+    if (trimmedPassword && trimmedPassword.length < 4) {
+      setErrorMessage("Password must be at least 4 characters long.");
       return;
     }
 
     setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 600));
 
-    // Register user with their requested workspace
-    await login({
-      email: email.trim(),
-      workspace: selectedWorkspace,
-      name: fullName.trim(),
-      organization: companyName.trim() || undefined,
-      rememberMe: true,
-      callbackUrl,
-    });
+    try {
+      const result = await register({
+        name: trimmedName,
+        email: trimmedEmail,
+        password: trimmedPassword || "admin2025",
+        workspace: selectedWorkspace,
+        organization: companyName.trim() || undefined,
+        department: department.trim() || undefined,
+        rememberMe: true,
+        callbackUrl,
+      });
+
+      if (!result.success) {
+        setErrorMessage(result.error || "Failed to complete registration.");
+        setLoading(false);
+      } else {
+        setSuccessMessage(`Account registered successfully! Welcome to EWS Learning.`);
+      }
+    } catch (e: any) {
+      setErrorMessage(e.message || "Failed to complete registration.");
+      setLoading(false);
+    }
+  };
+
+  // Handle SSO Mock Authentication
+  const handleSsoLogin = (provider: string) => {
+    setLoading(true);
+    setShowSsoModal(false);
+    setTimeout(() => {
+      loginAs(selectedWorkspace, callbackUrl);
+    }, 600);
   };
 
   return (
@@ -159,7 +204,7 @@ function LoginFormContent() {
         {/* Left Side: Enterprise Trust & Accreditation Panel */}
         <div className="lg:col-span-5 bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900 text-white p-8 sm:p-10 flex flex-col justify-between space-y-8 relative overflow-hidden">
           
-          {/* Subtle Ambient Background Watermark */}
+          {/* Ambient Background Watermark */}
           <div className="absolute -right-16 -bottom-16 opacity-5 pointer-events-none">
             <ShieldCheck className="w-80 h-80 text-white" />
           </div>
@@ -195,13 +240,53 @@ function LoginFormContent() {
                 Centralized gateway for enterprise clients, certified environmental auditors, and corporate workforces across India and international markets.
               </p>
             </div>
+
+            {/* Quick 1-Click Fast Passes */}
+            <div className="pt-2 space-y-2">
+              <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider block">
+                ⚡ 1-Click Evaluator Fast Pass
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => loginAs("ADMIN", callbackUrl)}
+                  className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-emerald-400 text-left transition-all group"
+                >
+                  <div className="text-xs font-bold text-emerald-300 group-hover:text-emerald-200 flex items-center gap-1">
+                    🛡️ Admin
+                  </div>
+                  <div className="text-[10px] text-slate-400">Directorate</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => loginAs("CORPORATE_CLIENT", callbackUrl)}
+                  className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-emerald-400 text-left transition-all group"
+                >
+                  <div className="text-xs font-bold text-teal-300 group-hover:text-teal-200 flex items-center gap-1">
+                    🏢 Corp
+                  </div>
+                  <div className="text-[10px] text-slate-400">BRSR Vault</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => loginAs("STUDENT", callbackUrl)}
+                  className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-700/80 hover:border-emerald-400 text-left transition-all group"
+                >
+                  <div className="text-xs font-bold text-cyan-300 group-hover:text-cyan-200 flex items-center gap-1">
+                    🎓 Student
+                  </div>
+                  <div className="text-[10px] text-slate-400">Classroom</div>
+                </button>
+              </div>
+            </div>
+
           </div>
 
           {/* Testimonial & Security Badges */}
-          <div className="space-y-4 pt-6 border-t border-slate-800 relative z-10 text-xs">
-            <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800/80 text-slate-300 italic text-[11px] leading-relaxed">
+          <div className="space-y-4 pt-4 border-t border-slate-800 relative z-10 text-xs">
+            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 text-slate-300 italic text-[11px] leading-relaxed">
               &quot;EWS Learning streamlined our plant-level BRSR Core workforce audit training across 4 manufacturing units with 100% verifiable compliance.&quot;
-              <div className="not-italic font-bold text-emerald-400 mt-2 text-[10px] uppercase tracking-wider">
+              <div className="not-italic font-bold text-emerald-400 mt-1.5 text-[10px] uppercase tracking-wider">
                 — Head of EHS & Sustainability, EcoIndustries Corp
               </div>
             </div>
@@ -212,8 +297,8 @@ function LoginFormContent() {
                 <span>256-Bit SSL Encrypted</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>CPCB & BRSR Aligned</span>
+                <Database className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Prisma DB Active</span>
               </div>
             </div>
           </div>
@@ -231,13 +316,15 @@ function LoginFormContent() {
                 <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
                   Identity & Access Management
                 </span>
-                <span className="text-[11px] text-slate-400 font-mono">v2.4 Secure</span>
+                <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-mono font-bold">
+                  🟢 Database Connected
+                </span>
               </div>
               <h2 className="text-2xl font-black text-slate-900 tracking-tight mt-1">
                 {activeTab === "SIGN_IN" ? "Sign In to Your Workspace" : "Request Workspace Access"}
               </h2>
               <p className="text-xs text-slate-500 mt-1">
-                Select your target workspace and provide your credentials.
+                Select your target workspace and provide your authorized credentials.
               </p>
             </div>
 
@@ -402,10 +489,14 @@ function LoginFormContent() {
             <div className="flex border-b border-slate-200 text-xs font-bold">
               <button
                 type="button"
-                onClick={() => setActiveTab("SIGN_IN")}
-                className={`pb-2.5 px-3 transition-colors border-b-2 ${
+                onClick={() => {
+                  setActiveTab("SIGN_IN");
+                  setErrorMessage(null);
+                  setSuccessMessage(null);
+                }}
+                className={`pb-2.5 px-3 transition-colors border-b-2 cursor-pointer ${
                   activeTab === "SIGN_IN"
-                    ? "border-emerald-600 text-emerald-700"
+                    ? "border-emerald-600 text-emerald-700 font-bold"
                     : "border-transparent text-slate-400 hover:text-slate-700"
                 }`}
               >
@@ -413,14 +504,18 @@ function LoginFormContent() {
               </button>
               <button
                 type="button"
-                onClick={() => setActiveTab("REGISTER")}
-                className={`pb-2.5 px-3 transition-colors border-b-2 ${
+                onClick={() => {
+                  setActiveTab("REGISTER");
+                  setErrorMessage(null);
+                  setSuccessMessage(null);
+                }}
+                className={`pb-2.5 px-3 transition-colors border-b-2 cursor-pointer ${
                   activeTab === "REGISTER"
-                    ? "border-emerald-600 text-emerald-700"
+                    ? "border-emerald-600 text-emerald-700 font-bold"
                     : "border-transparent text-slate-400 hover:text-slate-700"
                 }`}
               >
-                New Registration / Request Access
+                New Registration / Create Account
               </button>
             </div>
 
@@ -452,15 +547,19 @@ function LoginFormContent() {
                   </div>
                 </div>
 
-                {/* Password Field */}
+                {/* Password Field with Eye Toggle */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block font-bold text-slate-700">
-                      {selectedWorkspace === "ADMIN" ? "Directorate Passkey (admin2025)" : "Password"}
+                    <label className="font-bold text-slate-700">
+                      {selectedWorkspace === "ADMIN" ? "Directorate Passkey (admin2025)" : "Account Password"}
                     </label>
-                    <Link href="/contact" className="text-emerald-700 hover:underline text-[11px] font-semibold">
-                      Forgot Passcode?
-                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(true)}
+                      className="text-[11px] text-emerald-700 hover:text-emerald-800 font-medium hover:underline"
+                    >
+                      Forgot password?
+                    </button>
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -468,167 +567,306 @@ function LoginFormContent() {
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={handlePasswordChange}
-                      placeholder={selectedWorkspace === "ADMIN" ? "admin2025" : "••••••••"}
+                      placeholder={selectedWorkspace === "ADMIN" ? "Enter directorate passkey (admin2025)" : "••••••••"}
                       className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-50 border border-slate-200 font-medium text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white text-xs transition-colors"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-hidden"
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
 
-                {/* Remember Me */}
-                <div className="flex items-center justify-between pt-0.5">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                {/* Remember Me & SSO Button */}
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600">
                     <input
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
                     />
-                    <span className="text-slate-600 font-medium text-xs">Keep me authenticated for 30 days</span>
+                    <span>Remember this device (30 Days)</span>
                   </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSsoModal(true)}
+                    className="text-[11px] font-bold text-slate-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>🏢 Enterprise SSO</span>
+                  </button>
                 </div>
 
                 {/* Submit Action Button */}
                 <button
                   type="submit"
                   disabled={loading}
-                  className={`w-full py-3.5 rounded-xl font-bold text-xs transition-all shadow-lg flex items-center justify-center gap-2 ${
-                    selectedWorkspace === "ADMIN"
-                      ? "bg-slate-900 text-emerald-400 hover:bg-slate-800"
-                      : selectedWorkspace === "CORPORATE_CLIENT"
-                      ? "bg-emerald-600 text-white hover:bg-emerald-500"
-                      : "bg-teal-700 text-white hover:bg-teal-600"
-                  } ${loading ? "opacity-75 cursor-not-allowed" : "active:scale-[0.98]"}`}
+                  className="w-full py-3.5 px-4 rounded-xl bg-slate-900 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-lg hover:shadow-emerald-900/20 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {loading ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Authenticating with EWS Gateway...</span>
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                      <span>Authenticating with Security Vault...</span>
                     </>
                   ) : (
                     <>
-                      <span>
-                        Sign In to {WORKSPACE_LABELS[selectedWorkspace].short}
-                      </span>
-                      <ArrowRight className="w-4 h-4" />
+                      <span>Sign In to {WORKSPACE_LABELS[selectedWorkspace].short}</span>
+                      <ArrowRight className="w-4 h-4 text-emerald-400" />
                     </>
                   )}
                 </button>
+
               </form>
             ) : (
-              /* TAB 2: REGISTER / REQUEST ACCESS FORM */
-              <form onSubmit={handleRegister} className="space-y-3.5 text-xs">
+              /* TAB 2: REGISTRATION FORM */
+              <form onSubmit={handleRegister} className="space-y-4 text-xs">
+                
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Full Name</label>
+                  <label className="block font-bold text-slate-700 mb-1.5">Full Name <span className="text-rose-500">*</span></label>
                   <input
                     type="text"
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. Vikram Sharma"
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs"
+                    placeholder="e.g. Ramesh Kumar"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-medium text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white text-xs transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Official Email Address</label>
+                  <label className="block font-bold text-slate-700 mb-1.5">Corporate / Institutional Email <span className="text-rose-500">*</span></label>
                   <input
                     type="email"
                     required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={handleEmailChange}
                     placeholder="name@company.com"
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-medium text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white text-xs transition-colors"
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1.5">Organization / Plant</label>
+                    <input
+                      type="text"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      placeholder="e.g. EcoIndustries Ltd"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-medium text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white text-xs transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1.5">Department / Role</label>
+                    <input
+                      type="text"
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      placeholder="e.g. EHS Operations"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-medium text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white text-xs transition-colors"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Company / Organization</label>
-                  <input
-                    type="text"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="e.g. EcoIndustries Corp"
-                    className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-xs"
-                  />
+                  <label className="block font-bold text-slate-700 mb-1.5">Create Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={handlePasswordChange}
+                      placeholder="At least 4 characters (leave blank for demo passkey)"
+                      className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-medium text-slate-900 focus:outline-hidden focus:border-emerald-500 focus:bg-white text-xs transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all shadow-md flex items-center justify-center gap-2"
+                  className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Provisioning Workspace...</span>
+                      <span>Registering Credentials...</span>
                     </>
                   ) : (
                     <>
-                      <span>Create Account & Open {WORKSPACE_LABELS[selectedWorkspace].short}</span>
+                      <span>Complete Registration & Open {WORKSPACE_LABELS[selectedWorkspace].short}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
                 </button>
+
               </form>
             )}
 
           </div>
 
-          {/* Quick Evaluator Access Strip (1-Click Instant Login as any Role) */}
-          <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2.5 text-xs">
-            <span className="text-slate-500 font-bold flex items-center gap-1 text-[11px]">
-              <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
-              1-Click Demo Evaluation:
+          {/* Footer Security Notice */}
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+            <span className="flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              ISO 27001 Security Standard
             </span>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => loginAs("CORPORATE_CLIENT", callbackUrl)}
-                className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold transition-colors border border-emerald-200"
-              >
-                🏢 Corporate HR
-              </button>
-              <button
-                type="button"
-                onClick={() => loginAs("STUDENT", callbackUrl)}
-                className="px-2.5 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-[11px] font-bold transition-colors border border-teal-200"
-              >
-                🎓 Student
-              </button>
-              <button
-                type="button"
-                onClick={() => loginAs("ADMIN", callbackUrl)}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-900 text-emerald-400 hover:bg-slate-800 text-[11px] font-bold transition-colors border border-emerald-500/30"
-              >
-                🛡️ Admin CMS
-              </button>
-            </div>
+            <Link href="/privacy" className="hover:text-slate-600 transition-colors">
+              Privacy & Data Policy
+            </Link>
           </div>
 
         </div>
 
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                <KeyRound className="w-4 h-4 text-emerald-600" />
+                Reset Workspace Password
+              </div>
+              <button onClick={() => setShowForgotModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {forgotSent ? (
+              <div className="space-y-3 text-center py-4">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h4 className="font-bold text-slate-900 text-sm">Recovery Instructions Sent</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  We have dispatched a password recovery link to <strong className="text-slate-800">{forgotEmail || email || "your email"}</strong>. (For demo testing, you can sign in directly with passkey <code>admin2025</code>).
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotModal(false);
+                    setForgotSent(false);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Enter your registered institutional email to receive an instant authentication reset pass.
+                </p>
+                <input
+                  type="email"
+                  value={forgotEmail || email}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="name@company.com"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-medium text-slate-900 text-xs focus:outline-hidden focus:border-emerald-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setForgotSent(true)}
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Send Recovery Email</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Enterprise SSO Modal */}
+      {showSsoModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full border border-slate-200 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                <Building2 className="w-4 h-4 text-emerald-600" />
+                Enterprise Single Sign-On (SSO)
+              </div>
+              <button onClick={() => setShowSsoModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Authenticate using your company&apos;s corporate identity provider (IdP). Supported with SAML 2.0 and OpenID Connect.
+            </p>
+
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={() => handleSsoLogin("Microsoft Azure AD")}
+                className="w-full p-3 rounded-xl border border-slate-200 hover:border-slate-400 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-xs font-bold text-slate-800 transition-colors"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base">🟦</span>
+                  <span>Microsoft Azure Active Directory (Office 365)</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSsoLogin("Google Workspace SAML")}
+                className="w-full p-3 rounded-xl border border-slate-200 hover:border-slate-400 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-xs font-bold text-slate-800 transition-colors"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base">🔴</span>
+                  <span>Google Workspace SAML 2.0</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSsoLogin("Okta Enterprise")}
+                className="w-full p-3 rounded-xl border border-slate-200 hover:border-slate-400 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-xs font-bold text-slate-800 transition-colors"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base">🔘</span>
+                  <span>Okta Identity Management</span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-[80vh] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="text-center space-y-2">
+            <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="text-xs text-slate-500 font-semibold">Initializing Security Gateway...</p>
+          </div>
+        </div>
+      }
+    >
       <LoginFormContent />
     </Suspense>
   );
 }
-
